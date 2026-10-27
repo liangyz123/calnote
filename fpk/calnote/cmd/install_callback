@@ -1,0 +1,9 @@
+#!/bin/bash
+# 安装/升级后：首次落一份 portal.conf 到 ${TRIM_PKGETC}，已有就原样保留
+CONF_DIR="${TRIM_PKGETC}"
+[ -n "${CONF_DIR}" ] || CONF_DIR="${TRIM_PKGHOME}/etc"
+mkdir -p "${CONF_DIR}" 2>/dev/null
+if [ ! -f "${CONF_DIR}/portal.conf" ]; then
+    cp "${TRIM_APPDEST}/../conf/portal.conf" "${CONF_DIR}/portal.conf" 2>/dev/null || true
+fi
+exit 0

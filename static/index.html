@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#3D6FE0">
+<title>日历便签</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- ==================== 顶部栏 ==================== -->
+<div class="maincol">
+<header class="topbar">
+  <div class="month-nav">
+    <button class="icon-btn" id="btnPrev" aria-label="上一月">‹</button>
+    <div class="month-title" id="monthTitle">2026年10月</div>
+    <button class="icon-btn" id="btnNext" aria-label="下一月">›</button>
+  </div>
+  <div class="top-actions">
+    <button class="top-btn" id="btnToday">今天</button>
+    <button class="top-btn icon-top" id="btnSearch" title="搜索笔记">🔍</button>
+    <button class="top-btn icon-top" id="btnWho" title="当前登录账号 / 成员管理" style="display:none"></button>
+    <button class="top-btn icon-top" id="btnDrawer" title="更多">☰</button>
+    <button class="top-btn add-top" id="btnAddTop" onclick="openCreate(selectedDate,'note')" title="新建">＋</button>
+  </div>
+</header>
+
+<!-- ==================== 抽屉：分类 / 笔记 / 导入导出 ==================== -->
+<div class="drawer-mask" id="drawerMask" style="display:none" onclick="closeDrawer()"></div>
+<aside class="drawer" id="drawer" style="display:none">
+  <div class="drawer-head">
+    <div class="modal-title">日历便签</div>
+    <button class="head-btn" onclick="closeDrawer()">✕</button>
+  </div>
+  <div class="drawer-sec">
+    <div class="drawer-label">浏览</div>
+    <div class="cat-list" id="catList"></div>
+  </div>
+  <div class="drawer-sec">
+    <div class="drawer-label">数据</div>
+    <button class="drawer-btn" id="btnImport2">导入文件（CSV / 万年历txt / 弄文jsonl）</button>
+    <button class="drawer-btn" id="btnLedger2">💰 记账（账本 / 账户 / 每月统计）</button>
+    <button class="drawer-btn" id="btnVault2">🔐 密码本（网站账号密码）</button>
+    <button class="drawer-btn" id="btnExport2">导出全部内容为 CSV</button>
+  </div>
+  <div class="drawer-sec" id="secAccount" style="display:none">
+    <div class="drawer-label">账号</div>
+    <button class="drawer-btn" onclick="openMembers()">成员与口令（谁能看到什么）</button>
+  </div>
+  <div class="drawer-tip">手机：日历区左右滑切月份，上滑折叠日历，下滑展开。</div>
+</aside>
+
+<!-- ==================== 搜索 ==================== -->
+<div class="search-view" id="searchView" style="display:none">
+  <div class="search-bar">
+    <button class="head-btn" onclick="closeSearch()">‹ 返回</button>
+    <input type="search" id="searchInput" placeholder="搜笔记/日程/生日标题与正文" autocomplete="off">
+    <button class="head-btn primary-text" onclick="runSearch()">搜索</button>
+  </div>
+  <div class="search-filters" id="searchFilters"></div>
+  <div class="search-body" id="searchBody"></div>
+</div>
+
+<!-- ==================== 日历区（左右滑切月，上滑折叠） ==================== -->
+<div class="swipe-area" id="swipeArea">
+  <div class="week-row" id="weekRow"></div>
+  <div class="calendar-grid" id="calendarGrid"></div>
+  <div class="swipe-hint">↑ 上滑折叠日历 ／ ← → 左右滑切换月份</div>
+</div>
+
+<!-- ==================== 下方内容区（当天：天气+黄历+内容） ==================== -->
+<div class="content-area" id="contentArea">
+  <div class="day-head-card" id="dayHead"></div>
+  <div class="day-section-title" id="dayTitle">今天</div>
+  <div id="dayContent"></div>
+</div>
+
+<!-- ==================== 悬浮加号 ==================== -->
+<button class="fab" id="btnAdd">＋</button>
+</div>
+
+
+<!-- ==================== 年月跳转（数据跨度大时快速定位） ==================== -->
+<div class="modal-mask" id="jumpMask" style="display:none">
+  <div class="modal modal-center">
+    <div class="modal-head">
+      <div class="head-btn" style="visibility:hidden">占位</div>
+      <div class="modal-title">跳转年月</div>
+      <button class="head-btn" onclick="closeJump()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="jump-row">
+        <select id="jumpYear"></select>
+        <select id="jumpMonth"></select>
+      </div>
+      <div class="jump-years" id="jumpYears"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="primary-btn" onclick="doJump()">确定</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 分类条目列表视图 ==================== -->
+<div class="cat-view" id="catView" style="display:none">
+  <div class="cat-view-head">
+    <button class="head-btn" onclick="closeCatView()">‹ 返回</button>
+    <div class="modal-title" id="catViewTitle">默认日程</div>
+    <button class="head-btn add-in-folder" id="catAdd" onclick="newInFolder()" title="在这个文件夹里新建（仍会显示在当天日历）" style="display:none">＋ 新建</button>
+  </div>
+  <div id="catViewList"></div>
+</div>
+
+<!-- ==================== 新建 / 编辑（全屏，按类型显示表单） ==================== -->
+<div class="edit-mask" id="editMask" style="display:none">
+  <div class="edit-panel">
+    <div class="edit-head">
+      <button class="head-btn" onclick="closeEdit()">取消</button>
+      <div class="modal-title" id="editTitle">新建</div>
+      <button class="head-btn primary-text" id="btnSave" onclick="saveItem()">完成</button>
+    </div>
+
+    <!-- 便签信息条（笔记编辑时显示） -->
+    <div class="note-meta" id="noteMeta" style="display:none"></div>
+
+    <!-- 第 1 行：类型（小胶囊，就近弹出全部类型）＋ 添加图片 -->
+    <!-- 选附件先问来源：本地还是 NAS -->
+    <div class="src-pop" id="srcPop" style="display:none">
+      <button type="button" onclick="srcGo('local')">📱 手机 / 电脑本地</button>
+      <button type="button" onclick="srcGo('nas')">🗂 NAS 上的文件</button>
+    </div>
+    <div class="type-wrap">
+      <div class="type-row" id="typeRow">
+        <span class="type-value" id="typeValue">笔记 ▾</span>
+        <button type="button" class="pic-btn" id="btnAttachTop" onclick="pickSource(event,'img')">＋图片</button>
+        <button type="button" class="pic-btn" id="btnFileTop" onclick="pickSource(event,'file')">📎文件</button>
+        <select class="fld-sel" id="fFolder" onchange="onFolderPick(this)" title="放到哪个文件夹"></select>
+        <span class="tr-tip" id="trTip"></span>
+      </div>
+      <div class="type-dropdown" id="typeDropdown" style="display:none"></div>
+    </div>
+
+    <!-- 第 2 行：日期 ＋ 天气 -->
+    <div class="mline">
+      <div class="field"><div class="field-label">日期</div><input type="date" id="fDate"></div>
+      <div class="field wx-line" id="weatherWrap" style="display:none">
+        <div class="field-label">天气<span class="wx-src" id="wxSrc"></span>
+          <span class="wx-acts">
+            <button type="button" class="wx-ic" id="wxBtnUp" onclick="wxRefresh();return false" title="按这一天的日期重新取最新天气" aria-label="更新天气">&#8635;</button>
+            <button type="button" class="wx-ic off" id="wxBtnOff" onclick="wxClear();return false" title="这条不写天气" aria-label="不用天气">&#10005;</button>
+          </span></div>
+        <input type="text" class="line-input" id="fWeather" placeholder="留空 = 这条不写天气"></div>
+    </div>
+
+    <!-- 第 3 行：开始时间 ＋ 结束时间 -->
+    <div class="mline">
+      <div class="field" id="timeWrap"><div class="field-label">开始</div><input type="time" id="fTime"></div>
+      <div class="field" id="endTimeWrap" style="display:none"><div class="field-label">结束</div><input type="time" id="fEndTime"></div>
+    </div>
+
+    <!-- 第 4 行：地点 ＋ 提醒 -->
+    <div class="mline">
+      <div class="field" id="locWrap" style="display:none"><div class="field-label">地点</div>
+        <input type="text" class="line-input" id="fLocation" placeholder="可选"></div>
+      <div class="field" id="remindWrap" style="display:none"><div class="field-label">提醒</div>
+        <select id="fRemind">
+          <option value="0">不提醒</option>
+          <option value="10">提前 10 分钟</option>
+          <option value="30">提前 30 分钟</option>
+          <option value="60">提前 1 小时</option>
+          <option value="1440">提前 1 天</option>
+          <option value="4320">提前 3 天</option>
+        </select></div>
+    </div>
+
+    <!-- 第 5 行：开关们（按需出现，占一行） -->
+    <div class="mline checks">
+      <label class="check" id="allDayWrap" style="display:none"><input type="checkbox" id="fAllDay"> 全天</label>
+      <span id="allDayHint" style="display:none"></span>
+      <span id="lunarWrap" style="display:none">
+        <label class="check"><input type="checkbox" id="fLunar"> 按农历</label>
+        <label class="check"><input type="checkbox" id="fYearly" checked> 每年重复</label>
+      </span>
+      <label class="check" id="doneWrap" style="display:none"><input type="checkbox" id="fDone"> 已完成</label>
+      <label class="born" id="birthWrap" style="display:none">出生年<input type="number" id="fBirth" min="1900" max="2100" step="1" placeholder="如 1988" inputmode="numeric"><b class="age-in" id="ageTip"></b></label>
+    </div>
+
+    <!-- 标题 -->
+    <input type="text" class="big-input" id="fTitle" placeholder="名称（不写默认当天日期）">
+
+    <!-- 已添加的图片：一行小缩略图（点 ✕ 删单张） -->
+    <div class="field pic-line fold openable" id="attachWrap">
+      <button type="button" class="fold-hd" id="attFold" onclick="toggleAttachFold(event)">
+        <span class="fi">📎</span><b class="fn">附件</b><span class="cntn" id="attFoldN"></span>
+        <span class="ar">▸</span>
+      </button>
+      <div class="attach-list" id="attachList"></div>
+      <button type="button" class="attach-btn" id="btnAttach">＋</button>
+      <input type="file" id="fFile" accept="image/*" multiple hidden>
+      <input type="file" id="fAnyFile" hidden multiple>
+    </div>
+
+    <!-- 标签 -->
+    <input type="text" class="line-input tag-line" id="fTags" placeholder="标签，逗号分隔（可选）">
+
+    <!-- 正文：吃掉剩下的全部高度 -->
+    <textarea id="fContent" placeholder="写点什么…"></textarea>
+
+    <!-- 待办子项（待办类型时出现在正文下方） -->
+    <div class="field" id="todoWrap" style="display:none">
+      <div class="field-label">子项清单（逐项勾选）</div>
+      <div id="todoList"></div>
+      <button type="button" class="attach-btn" onclick="addTodoRow()">＋ 添加子项</button>
+    </div>
+
+    <!-- 删除已移到「当天内容」卡片上，编辑框里不再放（元素保留，样式隐藏） -->
+    <div id="btnDeleteWrap" style="display:none">
+      <button class="danger-btn" id="btnDelete">删除这条</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== NAS 文件选择器（只引用，不上传） ==================== -->
+<div class="nas-mask" id="nasMask" style="display:none">
+  <div class="nas-sheet">
+    <div class="nas-head">
+      <button class="head-btn" id="nasHome" onclick="nasHome()">🏠</button>
+      <button class="head-btn" id="nasUp" onclick="nasUp()">‹ 上层</button>
+      <div class="nas-path" id="nasPath"><span class="crumb">选择来源</span></div>
+      <button class="head-btn" onclick="closeNasPicker()">取消</button>
+    </div>
+    <div class="nas-tools">
+      <input type="search" id="nasQ" placeholder="搜这份目录里的文件名" oninput="nasSearchSoon()">
+      <button class="nas-only" id="nasSort" onclick="nasCycleSort()">排序：名称</button>
+      <button class="nas-only" id="nasDesc" onclick="nasFlipSort()">↑</button>
+      <button class="nas-only" id="nasGridBtn" onclick="setNasView('grid')">缩略图</button>
+      <button class="nas-only on" id="nasListBtn" onclick="setNasView('list')">列表</button>
+      <button class="nas-only on" id="nasAll" onclick="setNasOnly('')">全部</button>
+      <button class="nas-only" id="nasImg" onclick="setNasOnly('img')">只看图</button>
+    </div>
+    <div class="nas-grid" id="nasList"></div>
+    <div class="nas-foot">
+      <span id="nasSelN">未选择</span>
+      <button class="primary-mini" onclick="nasConfirm()">挂到这条笔记</button>
+    </div>
+  </div>
+</div>
+
+<!--  ==================== -->
+<!-- ==================== v9 密码本（保险柜） ==================== -->
+<div class="modal-mask" id="vaultMask" style="display:none">
+  <div class="modal modal-center vf-modal">
+    <div class="modal-head">
+      <button class="head-btn" onclick="vfClose()">关闭</button>
+      <div class="modal-title" id="vfTitle">密码本</div>
+      <div class="head-btn" style="visibility:hidden">占位</div>
+    </div>
+    <div class="modal-body" id="vfBody"></div>
+  </div>
+</div>
+
+<!-- ==================== v9 记账：本月账本 ==================== -->
+<div class="modal-mask" id="ledMask" style="display:none">
+  <div class="modal modal-center led-modal">
+    <div class="modal-head">
+      <button class="head-btn" onclick="ledClose()">关闭</button>
+      <div class="modal-title">记账</div>
+      <button class="head-btn" onclick="ledNewBook()">＋账本</button>
+    </div>
+    <div class="modal-body" id="ledBody"></div>
+    <div class="modal-foot">
+      <input type="month" id="ledMonthInput" class="led-sel" onchange="ledState.month=this.value;ledLoad()">
+      <span style="flex:1"></span>
+      <button class="primary-btn" onclick="ledQuick()">＋ 记一笔</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== v9 记账：记一笔（两步就能记完） ==================== -->
+<div class="modal-mask" id="ledQuickMask" style="display:none">
+  <div class="modal modal-center led-quick">
+    <div class="modal-head">
+      <button class="head-btn" onclick="ledQuickClose()">取消</button>
+      <div class="modal-title">记一笔</div>
+      <div class="head-btn" style="visibility:hidden">占位</div>
+    </div>
+    <div class="modal-body">
+      <div class="lq-segs">
+        <button type="button" class="lq-seg on" data-dir="out" onclick="ledSeg('out')">支出</button>
+        <button type="button" class="lq-seg" data-dir="in" onclick="ledSeg('in')">收入</button>
+        <button type="button" class="lq-seg" data-dir="transfer" onclick="ledSeg('transfer')">转账</button>
+      </div>
+      <div class="field"><div class="field-label">金额（元）</div>
+        <input type="text" id="lqAmount" class="lq-amount" inputmode="decimal" placeholder="0" autocomplete="off"></div>
+      <div class="field" id="lqCatRow"><div class="field-label">分类</div><div class="lq-chips" id="lqCats"></div></div>
+      <div class="field"><div class="field-label">账户</div><div class="lq-chips" id="lqAccs"></div></div>
+      <div class="field" id="lqToRow" style="display:none"><div class="field-label">转到哪个账户</div>
+        <div class="lq-chips" id="lqToAccs"></div></div>
+      <div class="field"><div class="field-label">日期</div><input type="date" id="lqDay"></div>
+      <div class="field"><div class="field-label">备注（可选）</div>
+        <input type="text" id="lqNote" placeholder="比如：老街早市" autocomplete="off"></div>
+    </div>
+    <div class="modal-foot"><button class="primary-btn" onclick="ledQuickSave()">记下</button></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="membersMask" style="display:none">
+  <div class="modal modal-center">
+    <div class="modal-head">
+      <button class="head-btn" onclick="closeMembers()">关闭</button>
+      <div class="modal-title">成员与口令</div>
+      <div class="head-btn" style="visibility:hidden">占位</div>
+    </div>
+    <div class="modal-body">
+      <p class="hint">权限只有一条：<b>笔记只有本人能看到、能改</b>；日程 / 生日 / 纪念日 / 待办 / 倒数日全家共享、互相都能整理。
+      登录状态默认保持 30 天。改了谁的口令，只有那个人需要重新登录。</p>
+      <div id="memList"></div>
+      <div id="memAddBox" style="display:none">
+        <div class="field"><div class="field-label">新账号（字母数字下划线或中文，2-20 位）</div>
+          <input type="text" id="mName" autocomplete="off"></div>
+        <div class="field"><div class="field-label">显示名（可选，比如「老婆」）</div>
+          <input type="text" id="mDisp" autocomplete="off"></div>
+        <div class="field"><div class="field-label">初始口令（至少 6 位，发给他后让他自己改）</div>
+          <input type="text" id="mPass" autocomplete="off"></div>
+        <button class="primary-btn" onclick="addMember()">添加成员</button>
+      </div>
+      <div class="field" style="margin-top:14px">
+        <button class="primary-btn" onclick="changeMyPass()">改我的口令</button>
+        <button class="primary-btn" id="memAddBtn" style="display:none" onclick="document.getElementById('memAddBox').style.display='block'">＋ 新成员</button>
+        <button class="primary-btn" onclick="location.href='/logout'">退出登录</button>
+      </div>
+      <div class="import-result" id="memResult"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-mask" id="importMask" style="display:none">
+  <div class="modal modal-center">
+    <div class="modal-head">
+      <button class="head-btn" onclick="closeImport()">取消</button>
+      <div class="modal-title">批量导入</div>
+      <div class="head-btn" style="visibility:hidden">占位</div>
+    </div>
+    <div class="modal-body">
+      <p class="hint">支持四种文件（<b>自动识别格式</b>，扩展名无所谓）：<br>
+      <b>① CSV</b> —— 本应用「导出」的格式，可反复导入（重复自动跳过）<br>
+      <b>② calnote_import.jsonl</b> —— 弄文笔记那样子：一行一条 JSON（带 type/title/date/content/contentText…）<br>
+      <b>③ 中华万年历导出 txt</b> —— 每行一条 JSON，记事→笔记（标题用日历时间）、生日→生日、提醒→日程、清单→待办，天气/地点/提醒都带出来<br>
+      <b>④ 弄文笔记自带的 exports/*.jsonl</b> —— 也能直接选，笔记内容进「笔记」<br>
+      <code>type,title,date,time,end_time,all_day,content,tags,location,remind_minutes,is_lunar,yearly,done,weather,todo_items</code></p>
+      <div class="field"><div class="field-label">选择文件（csv / txt / jsonl）</div>
+        <input type="file" id="fCsvFile" accept=".csv,.txt,.jsonl,text/csv,text/plain,application/json"></div>
+      <div class="field"><div class="field-label">只导入这个日期之后（含）的内容，可选</div>
+        <input type="date" id="fSince"></div>
+      <label class="check"><input type="checkbox" id="fDedupe" checked> 跳过重复（同日期+同类型+正文开头相同）</label>
+      <div class="field"><div class="field-label">或直接粘贴内容</div>
+        <textarea id="fCsv" rows="4" placeholder="type,title,date,time,end_time,all_day,content,tags,location,remind_minutes,is_lunar,yearly,done&#10;笔记,第一篇笔记,2026-10-17,,,,写点什么,生活,,0,0,0,0"></textarea></div>
+      <div class="import-result" id="importResult"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="primary-btn" onclick="importSubmit()">开始导入</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 提醒弹窗 ==================== -->
+<div class="modal-mask" id="remindMask" style="display:none">
+  <div class="modal modal-center">
+    <div class="modal-head">
+      <button class="head-btn" onclick="closeRemind()">✕</button>
+      <div class="modal-title">提醒</div>
+      <div class="head-btn" style="visibility:hidden">占位</div>
+    </div>
+    <div class="modal-body" id="remindBody"></div>
+  </div>
+</div>
+
+
+<div class="asheet" id="attSheet" style="display:none" onclick="if(event.target===this)closeAsSheet()">
+  <div class="as-box"><div class="as-name" id="asName"></div><div class="as-list" id="asList"></div>
+  <button type="button" class="as-cancel" onclick="closeAsSheet()">取消</button></div>
+</div>
+
+<!-- 看原图 / 附件预览（v5.12） -->
+<div class="picview" id="picView" style="display:none" onclick="closePic()">
+  <img id="picViewImg" alt="" ondblclick="event.stopPropagation();zoomPic(this)">
+  <button type="button" class="pic-x" onclick="event.stopPropagation();closePic()" aria-label="关闭">✕</button>
+  <div class="picbar"><span id="picName"></span><a id="picOpen" href="#" target="_blank" rel="noopener">在新窗口打开</a><a id="picDl" href="#" download>下载原文件</a><span class="picx">点任意处 / 双击图放大</span>
+    <button type="button" class="pic-close" onclick="event.stopPropagation();closePic()">关闭</button></div>
+</div>
+<script src="/ledger.js"></script>
+<script src="/vault.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

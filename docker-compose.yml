@@ -1,0 +1,86 @@
+# ============================================================
+# 日历便签 (calnote) —— docker compose 部署
+# 用法：把本目录放到 NAS 上，cd 进来执行 docker compose up -d
+# 访问：http://NAS地址:8000
+# ============================================================
+services:
+  calnote:
+    build: .
+    image: calnote:latest
+    container_name: calnote
+    restart: unless-stopped
+    ports:
+      - "8000:8000"          # 前面 8000 是 NAS 端口，可改成其他端口避免冲突
+    volumes:
+      - ./data:/app/data     # 笔记数据保存在 NAS 本地 ./data 目录，删容器不丢
+      # ─── v6.0 新增：把 NAS 上现成的资料/照片目录「只读」挂进容器 ───
+      # 冒号左边 = NAS 上的真实路径；右边 = 容器里看到的路径；结尾 :ro = 只读（应用改不了你的原文件）
+      # 这三行必须和下面 NAS_ROOTS 的容器路径一一对应，改了哪边都要同步改
+      - /vol3/1000/01资料:/nas/资料:ro
+      - /vol3/1000/相片:/nas/相片:ro
+      - /vol4/@team/制造分厂:/nas/制造分厂:ro
+    environment:
+      - TZ=Asia/Shanghai
+      - PORT=8000
+      # 缺天气时页面「取天气」按钮联网抓历史天气用的城市与坐标（默认广西兴安县）
+      - WEATHER_CITY=兴安县
+      - WEATHER_LAT=25.6128
+      - WEATHER_LON=110.6720
+      # ─── v6.0：允许「从NAS选文件」的来源目录（别名:容器内路径，逗号分隔）───
+      # 别名会出现在选择器第一屏，也写进数据库（存的是 别名/相对路径，换盘只改这里，旧笔记照样能开）
+      - NAS_ROOTS=资料:/nas/资料,相片:/nas/相片,制造分厂:/nas/制造分厂
+      # 缩略图缓存上限（超了自动删最旧，data/thumbs 整个删掉也没关系，会自动重建）
+      - THUMB_MAX_FILES=8000
+      - THUMB_MAX_MB=500
+      # 单次列目录最多多少条（大目录翻页加载，别一次吐几万个）
+      - NAS_MAX_FILES=300
+      # 0 = 预览不限制体积；想禁止在线打开超大文件就填 500（单位 MB）
+      - NAS_PREVIEW_MAX_MB=0
+      # 多少毫米以上才算下雨（默认 0.5；觉得雨还是太多就设 1.5 或 2）
+      - RAIN_MIN_MM=0.5
+      # 视频封面需要 ffmpeg：想给视频抽一帧当封面，就去 Dockerfile 里把注释掉的那行 RUN ffmpeg 打开，再 --build 一次
+
+      # ─── v8.3 性能/健壮性新增项（不设就用括号里的默认值）───
+      # 数据库并发：忙等毫秒 / WAL 日志模式。data 若挂在 NFS、SMB 这类共享文件系统上，
+      # WAL 不安全，必须设 DB_WAL=0（本地盘、飞牛本机卷保持默认 1 即可）。
+      - DB_BUSY_MS=10000
+      - DB_WAL=1
+      # 天气：联网取数的超时秒数；缓存攒够多少秒才整体落盘一次（原来每取一天就整写一遍）
+      - WEATHER_TIMEOUT=5
+      - WX_FLUSH_SEC=30
+      # 多少毫米以上才算下雨（本版把代码默认值对齐到文档的 0.5）
+      - RAIN_MIN_MM=0.5
+      # 缩略图缓存：攒够多少张 / 隔多少秒才扫一次目录做淘汰（原来每生成一张就全目录 stat）
+      - THUMB_SWEEP_SEC=120
+      # 列 NAS 目录时，每个子目录的「多少项」最数到这儿（超过显示 120+），大目录不再卡住
+      - NAS_DIR_COUNT=120
+      # 单次请求体上限（附件 20MB + 余量）
+      - MAX_BODY_MB=26
+      # ─── v8.3 账号密码防护（本版已启用）───
+      # 开启后：没在浏览器里登录过一次，页面和所有 /api/ 数据接口都拿不到内容。
+      # 登录一次默认 30 天内免输入（Cookie 签名有效期，改 AUTH_TTL_DAYS 可调）。
+      # 换口令只改这两行，再 docker compose up -d 重建；改了口令所有人的登录状态立即作废。
+      - AUTH_USER=${CAL_USER:-calnote}
+      - AUTH_PASS=${CAL_PASS:?请先在本目录建 .env，写上 CAL_PASS=你的登录口令}
+      # 登录状态保持天数（默认 30 天）
+      - AUTH_TTL_DAYS=30
+      # 通过 fnOS 的 https 域名访问时，把下一行的 # 去掉，Cookie 只在加密连接里传
+      # - AUTH_COOKIE_SECURE=1
+      # v9 多用户：全家共用这台便签，但「笔记」只有本人能看到；日程/生日/纪念日/待办/倒数日共享。
+      # 首次启动会自动建这 2 个成员账号（管理员就是上面 AUTH_USER 那个）。家人登录后进
+      # 「成员与口令」改成自己的口令即可；要再加人也在成员页里加。
+      - AUTH_MEMBERS=jiaren1,jiaren2
+      - AUTH_MEMBER_PASS=${CAL_MEMBER_PASS:?请在 .env 里写 CAL_MEMBER_PASS=家人用的口令}
+      # ─── v9 第 3 期 密码本 ───
+      # 主口令本身不在这儿配（也不该配）：第一次进「密码本」时由你设，只存派生后的校验值。
+      # 解锁后保持多少分钟不用重输（默认 30）
+      - VAULT_SESSION_MIN=30
+      # scrypt 强度：N=32768 约 32MB 内存 / 85ms，NAS 上够用；机器紧张可设 16384
+      - VAULT_KDF_N=32768
+      # 连续输错主口令的次数与锁定时长（默认 8 次 / 5 分钟）
+      - VAULT_FAIL_LIMIT=8
+      - VAULT_LOCK_SEC=300
+      # 脚本 / curl 直接调接口时，仍可用 -u 账号:口令 带凭据，不用模拟登录，例如：
+      #   curl -u 你的账号:你的口令 http://NAS内网IP:8000/api/stats
+      # 口令写在同目录的 .env 里（该文件已被 .gitignore 挡住，不会进仓库）。
+# 想彻底关掉防护：把上面 AUTH_USER / AUTH_PASS 两行注释掉即可（回到无口令状态）。

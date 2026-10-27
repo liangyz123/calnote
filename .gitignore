@@ -1,0 +1,32 @@
+# 数据与缓存：绝对不能进仓库
+/data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.log
+nohup.out
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 系统与编辑器
+.DS_Store
+*.swp
+*.orig
+*.rej
+.idea/
+.vscode/
+.qoder/
+
+# 本地实验目录（沙箱里那些 vNN 试验版本、截图、日志）
+/exp/
+shots/
+local/
+*.pid
+
+# 本机口令/密钥，永不提交
+.env

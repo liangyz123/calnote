@@ -1,0 +1,10 @@
+appname               = calnote
+version               = 9.5.0
+display_name          = 日历便签
+desc                  = 日历便签（NAS 桌面入口，点开直接进便签；服务本身仍跑在你已有的 Docker 容器里）
+platform              = x86
+source                = thirdparty
+maintainer            = 梁彦忠
+distributor           = 梁彦忠
+desktop_uidir         = ui
+desktop_applaunchname = calnote.Application
